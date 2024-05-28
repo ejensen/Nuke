@@ -198,12 +198,6 @@ private final class ImageViewController {
     private var task: ImageTask?
     private var options: ImageLoadingOptions
 
-#if os(iOS) || os(tvOS) || os(visionOS)
-    // Image view used for cross-fade transition between images with different
-    // content modes.
-    private lazy var transitionImageView = UIImageView()
-#endif
-
     // Automatically cancel the request when the view is deallocated.
     deinit {
         task?.cancel()
@@ -400,21 +394,18 @@ extension ImageViewController {
         )
     }
 
-    /// Performs cross-dissolve animation alonside transition to a new content
+    /// Performs cross-dissolve animation alongside transition to a new content
     /// mode. This isn't natively supported feature and it requires a second
     /// image view. There might be better ways to implement it.
     private func runCrossDissolveWithContentMode(imageView: UIImageView, image: ImageContainer, params: ImageLoadingOptions.Transition.Parameters) {
-        // Lazily create a transition view.
-        let transitionView = self.transitionImageView
-
         // Create a transition view which mimics current view's contents.
-        transitionView.image = imageView.image
-        transitionView.contentMode = imageView.contentMode
-        imageView.addSubview(transitionView)
-        transitionView.frame = imageView.bounds
+        var transitionView: UIView? = imageView.snapshotView(afterScreenUpdates: false)
+        if let transitionView, let superview = imageView.superview {
+            superview.insertSubview(transitionView, aboveSubview: imageView)
+            transitionView.frame = imageView.frame
+        }
 
         // "Manual" cross-fade.
-        transitionView.alpha = 1
         imageView.alpha = 0
         imageView.display(image) // Display new image in current view
 
@@ -423,13 +414,11 @@ extension ImageViewController {
             delay: 0,
             options: params.options,
             animations: {
-                transitionView.alpha = 0
+                transitionView?.alpha = 0
                 imageView.alpha = 1
             },
-            completion: { isCompleted in
-                if isCompleted {
-                    transitionView.removeFromSuperview()
-                }
+            completion: { [weak transitionView] _ in
+                transitionView?.removeFromSuperview()
             }
         )
     }
